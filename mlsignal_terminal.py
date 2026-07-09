@@ -1,11 +1,3 @@
-# ── Set your Alpaca PAPER keys here (or as environment variables) ───────────
-# Either export ALPACA_API_KEY / ALPACA_SECRET_KEY in your terminal,
-# or replace the two os.environ.get(...) lines below with your keys directly:
-#     API_KEY = "PK..."
-#     SECRET_KEY = "..."
-# PAPER TRADING ONLY — the trading client is hard-coded to paper=True.
-# ────────────────────────────────────────────────────────────────────────────
-
 import os
 import queue
 import threading
@@ -35,26 +27,23 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from tkinter import ttk
 
-API_KEY = "YOUR KEY"
-SECRET_KEY = "YOUR SECRET KEY"
+API_KEY = "ALPACA_API_KEY"
+SECRET_KEY = "ALPACA_SECRET_KEY"
 
 INITIAL = 100_000
 TRADING_DAYS = 252
-PROB_THRESHOLD = 0.40     # long if P(up) > 0.60, else flat
-TRAIN_FRAC = 0.70         # time-ordered train/test split
-TARGET_NOTIONAL = 10_000  # paper order size in dollars
+PROB_THRESHOLD = 0.60
+TRAIN_FRAC = 0.70
+TARGET_NOTIONAL = 10_000
 
 
-# ============================================================================
-#  DATA
-# ============================================================================
 class DataConnector:
     def __init__(self, api_key, secret_key):
         if not api_key or not secret_key:
             raise RuntimeError("Missing API keys. Set ALPACA_API_KEY and "
                                "ALPACA_SECRET_KEY (or paste them in the code).")
         self.data = StockHistoricalDataClient(api_key, secret_key)
-        self.trading = TradingClient(api_key, secret_key, paper=True)  # PAPER ONLY
+        self.trading = TradingClient(api_key, secret_key, paper=True)
 
     def get_daily(self, symbol, years=5):
         end = datetime.now(timezone.utc) - timedelta(minutes=20)
@@ -71,9 +60,6 @@ class DataConnector:
         return df.set_index("timestamp")[["open", "high", "low", "close", "volume"]]
 
 
-# ============================================================================
-#  INDICATORS / FEATURES
-# ============================================================================
 def ema(s, n):
     return s.ewm(span=n, adjust=False).mean()
 
@@ -122,40 +108,37 @@ def build_features(df):
     c, h, l, v = df["close"], df["high"], df["low"], df["volume"]
     f = pd.DataFrame(index=df.index)
 
-    # trend
+
     f["sma_ratio"] = c / c.rolling(20).mean() - 1
     f["ema_ratio"] = c / ema(c, 20) - 1
     macd = ema(c, 12) - ema(c, 26)
     f["macd_hist"] = (macd - macd.ewm(span=9, adjust=False).mean()) / c
     f["adx"] = adx(h, l, c)
-    # momentum
+
     f["rsi"] = rsi(c)
     f["stoch_k"] = stochastic_k(h, l, c)
     f["williams_r"] = williams_r(h, l, c)
-    # volatility
+
     mid = c.rolling(20).mean()
     sd = c.rolling(20).std()
     f["bb_pctb"] = (c - (mid - 2 * sd)) / (4 * sd).replace(0, np.nan)
     f["atr_pct"] = true_range(h, l, c).ewm(alpha=1 / 14, adjust=False).mean() / c
-    # volume
+
     obv = (np.sign(c.diff()).fillna(0) * v).cumsum()
     f["obv_chg"] = obv.diff() / v.rolling(20).mean()
     f["cmf"] = cmf(h, l, c, v)
-    # returns & rolling stats
+
     f["log_ret"] = np.log(c / c.shift(1))
     f["roll_mean"] = f["log_ret"].rolling(10).mean()
     f["roll_std"] = f["log_ret"].rolling(10).std()
 
-    target = (c.shift(-1) > c).astype(int)   # next-day up?
+    target = (c.shift(-1) > c).astype(int)
     data = f.copy()
     data["target"] = target
     data = data.replace([np.inf, -np.inf], np.nan).dropna()
     return data.drop(columns="target"), data["target"]
 
 
-# ============================================================================
-#  ML PIPELINE
-# ============================================================================
 def train_pipeline(X, y):
     n = len(X)
     split = int(n * TRAIN_FRAC)
@@ -163,7 +146,7 @@ def train_pipeline(X, y):
     ytr, yte = y.iloc[:split], y.iloc[split:]
 
     scaler = StandardScaler().fit(Xtr)
-    pca = PCA(n_components=0.80).fit(scaler.transform(Xtr))   # keep >=80% variance
+    pca = PCA(n_components=0.80).fit(scaler.transform(Xtr))
     Ztr = pca.transform(scaler.transform(Xtr))
     Zte = pca.transform(scaler.transform(Xte))
 
@@ -189,9 +172,6 @@ def latest_signal(df, scaler, pca, model, feature_cols):
     return (1 if proba > PROB_THRESHOLD else 0), proba, X.index[-1]
 
 
-# ============================================================================
-#  BACKTEST + METRICS
-# ============================================================================
 def run_backtest(close, positions, initial=INITIAL):
     ret = close.pct_change().fillna(0)
     strat = positions.shift(1).fillna(0) * ret
@@ -239,9 +219,6 @@ def analyze(df):
             "ml_stats": metrics(ml), "bh_stats": metrics(bh)}
 
 
-# ============================================================================
-#  UI
-# ============================================================================
 DARK, PANEL, FG, MUTED = "#0d1117", "#161b22", "#c9d1d9", "#8b949e"
 
 
@@ -330,7 +307,7 @@ class MLApp:
             s.set_color("#30363d")
         ax.grid(True, color="#21262d", linewidth=0.5)
 
-    # ---- train ----
+
     def _quick(self, s):
         self.symbol_var.set(s)
         self.train()
@@ -355,7 +332,7 @@ class MLApp:
         except Exception as e:
             self.queue.put(("error", str(e)))
 
-    # ---- paper trade ----
+
     def paper_trade(self):
         if not self.out:
             return
@@ -410,7 +387,7 @@ class MLApp:
         except Exception as e:
             self.queue.put(("log", f"ERROR: {e}"))
 
-    # ---- queue ----
+
     def _drain(self):
         try:
             while True:
@@ -433,13 +410,13 @@ class MLApp:
             pass
         self.root.after(150, self._drain)
 
-    # ---- render ----
+
     def _render(self):
         self._draw_backtest()
         self._draw_drawdown()
         self._draw_pca()
         self._fill_metrics()
-        
+
     def _draw_backtest(self):
         fig = self.fig_bt["fig"]
         fig.clear()
