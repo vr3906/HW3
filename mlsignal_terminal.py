@@ -35,8 +35,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from tkinter import ttk
 
-API_KEY = "PKN6FYCWZJP3SBCFBJRJTXX2HW"
-SECRET_KEY = "HxgLAUTkmirjvpJxbKYLFjqmRQ4GeiwFUDXiCdBUoxvy"
+API_KEY = "YOUR KEY"
+SECRET_KEY = "YOUR SECRET KEY"
 
 INITIAL = 100_000
 TRADING_DAYS = 252
